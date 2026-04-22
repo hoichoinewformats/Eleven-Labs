@@ -3,6 +3,7 @@ dist
 .env
 .env.*
 !.env.example
+.jwt-secret
 uploads/
 *.log
 .DS_Store

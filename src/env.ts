@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { loadOrCreateJwtSecret } from './auth/jwt-secret.js';
 
 function required(name: string): string {
   const v = process.env[name];
@@ -10,28 +11,34 @@ function optional(name: string, fallback: string): string {
   return process.env[name] ?? fallback;
 }
 
+// Three required vars only. Everything else has sane defaults.
 export const env = {
+  // Required
+  DATABASE_URL: required('DATABASE_URL'),
+  OPENROUTER_API_KEY: required('OPENROUTER_API_KEY'),
+  ELEVENLABS_API_KEY: required('ELEVENLABS_API_KEY'),
+
+  // Sensible defaults
   PORT: Number(optional('PORT', '4000')),
   HOST: optional('HOST', '0.0.0.0'),
-  NODE_ENV: optional('NODE_ENV', 'development'),
-  CORS_ORIGIN: optional('CORS_ORIGIN', 'http://localhost:5173')
+  CORS_ORIGIN: optional('CORS_ORIGIN', '*')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
 
-  DATABASE_URL: required('DATABASE_URL'),
+  // Free OpenRouter model by default; override per project. Examples:
+  //   anthropic/claude-sonnet-4.6   (paid, best for nuanced JSON)
+  //   openai/gpt-4o                  (paid)
+  //   google/gemini-2.0-flash-exp:free
+  //   meta-llama/llama-3.3-70b-instruct:free
+  OPENROUTER_MODEL: optional('OPENROUTER_MODEL', 'nvidia/nemotron-3-super-120b-a12b:free'),
 
-  REDIS_URL: optional('REDIS_URL', 'redis://localhost:6379'),
-  WORKER_MODE: (optional('WORKER_MODE', 'queue') as 'queue' | 'inline'),
-
-  JWT_SECRET: required('JWT_SECRET'),
+  // Auto-generated, persisted to .jwt-secret (gitignored)
+  JWT_SECRET: loadOrCreateJwtSecret(),
   JWT_EXPIRES_IN: optional('JWT_EXPIRES_IN', '7d'),
-
-  ANTHROPIC_API_KEY: required('ANTHROPIC_API_KEY'),
-  CLAUDE_MODEL: optional('CLAUDE_MODEL', 'claude-sonnet-4-6'),
-
-  ELEVENLABS_API_KEY: required('ELEVENLABS_API_KEY'),
 
   UPLOAD_DIR: optional('UPLOAD_DIR', './uploads'),
   MAX_UPLOAD_MB: Number(optional('MAX_UPLOAD_MB', '25')),
+
+  NODE_ENV: optional('NODE_ENV', 'development'),
 };

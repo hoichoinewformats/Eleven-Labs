@@ -2,7 +2,7 @@ import path from 'node:path';
 import { prisma } from '../db.js';
 import { env } from '../env.js';
 import { docxToText } from './docx.js';
-import { analyzeScript, rankVoicesForCharacter, type AnalyzedCharacter } from './claude.js';
+import { analyzeScript, rankVoicesForCharacter, type AnalyzedCharacter } from './llm.js';
 import {
   searchSharedVoices,
   ageLabelForVoice,

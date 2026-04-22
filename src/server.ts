@@ -9,7 +9,7 @@ import { scriptRoutes } from './routes/scripts.js';
 import { castingRoutes } from './routes/casting.js';
 import { dialogueRoutes } from './routes/dialogues.js';
 import { eventRoutes } from './routes/events.js';
-import { startScriptWorker } from './lib/queue.js';
+import { startScriptWorker, stopBoss } from './lib/queue.js';
 import './types.js';
 
 async function build() {
@@ -25,7 +25,7 @@ async function build() {
   });
 
   await app.register(cors, {
-    origin: env.CORS_ORIGIN,
+    origin: env.CORS_ORIGIN.length === 1 && env.CORS_ORIGIN[0] === '*' ? true : env.CORS_ORIGIN,
     credentials: true,
   });
 
@@ -64,21 +64,24 @@ async function main() {
     await app.listen({ port: env.PORT, host: env.HOST });
     app.log.info(`logline-ai backend listening on http://${env.HOST}:${env.PORT}`);
 
-    // In inline mode (dev default) we also run a worker in this process so
-    // `npm run dev` is a single command. In queue mode (production) the API
-    // only enqueues; run `npm run start:worker` in a separate process.
-    if (env.WORKER_MODE === 'inline') {
-      const w = startScriptWorker();
-      app.log.info(
-        `WORKER_MODE=inline: in-process BullMQ worker attached (concurrency ${w.opts.concurrency ?? 'default'})`,
-      );
-    } else {
-      app.log.info('WORKER_MODE=queue: API enqueues only - run `npm run start:worker` separately.');
-    }
+    // Start the in-process pg-boss worker. Single-process design - no
+    // separate worker entrypoint, no Redis. Jobs persist in Postgres so
+    // they survive restarts.
+    await startScriptWorker({ concurrency: 2 });
+    app.log.info('pg-boss worker started (concurrency 2)');
   } catch (err) {
     app.log.error(err);
     process.exit(1);
   }
+
+  const shutdown = async (sig: string) => {
+    app.log.info(`received ${sig}, shutting down…`);
+    await stopBoss();
+    await app.close();
+    process.exit(0);
+  };
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
 }
 
 main();

@@ -1,5 +1,5 @@
 import { env } from '../env.js';
-import type { VoiceCandidate } from './claude.js';
+import type { VoiceCandidate } from './llm.js';
 
 const BASE = 'https://api.elevenlabs.io';
 

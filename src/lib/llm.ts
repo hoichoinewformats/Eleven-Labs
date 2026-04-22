@@ -1,7 +1,19 @@
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { env } from '../env.js';
 
-export const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+// We use the OpenAI SDK pointed at OpenRouter so we can swap models freely
+// (Claude / GPT / Llama / Nemotron / Gemini) by changing one env var.
+// OPENROUTER_MODEL defaults to a free model so the project boots without
+// adding paid credits.
+export const llm = new OpenAI({
+  apiKey: env.OPENROUTER_API_KEY,
+  baseURL: 'https://openrouter.ai/api/v1',
+  defaultHeaders: {
+    // OpenRouter uses these to track per-app usage in their dashboard.
+    'HTTP-Referer': 'https://logline.hoichoi.tv',
+    'X-Title': 'Logline AI',
+  },
+});
 
 export type AnalyzedDialogue = {
   sequence: number;
@@ -71,16 +83,18 @@ Return ONLY valid JSON matching this exact schema. No prose, no markdown, no cod
 }`;
 
 /**
- * Send the full script text to Claude and get back a structured analysis.
- * The script is sent in one shot - Sonnet 4.6 handles 200K context, more
- * than enough for any audio-drama episode bundle.
+ * Send the full script text to the LLM and get back a structured analysis.
+ * Free OpenRouter models (default: nvidia/nemotron-3-super-120b-a12b:free)
+ * are usable but less reliable about JSON formatting than paid Claude / GPT.
+ * The parser is defensive about stray code fences.
  */
 export async function analyzeScript(rawText: string): Promise<ScriptAnalysis> {
-  const response = await anthropic.messages.create({
-    model: env.CLAUDE_MODEL,
+  const response = await llm.chat.completions.create({
+    model: env.OPENROUTER_MODEL,
     max_tokens: 16000,
-    system: ANALYSIS_SYSTEM,
+    response_format: { type: 'json_object' },
     messages: [
+      { role: 'system', content: ANALYSIS_SYSTEM },
       {
         role: 'user',
         content: `Analyze the following script. Return JSON only.\n\n<script>\n${rawText}\n</script>`,
@@ -88,11 +102,9 @@ export async function analyzeScript(rawText: string): Promise<ScriptAnalysis> {
     ],
   });
 
-  const block = response.content[0];
-  if (!block || block.type !== 'text') {
-    throw new Error('Claude returned no text content');
-  }
-  return parseJson<ScriptAnalysis>(block.text);
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error('LLM returned no content');
+  return parseJson<ScriptAnalysis>(content);
 }
 
 export type VoiceCandidate = {
@@ -105,15 +117,6 @@ export type VoiceCandidate = {
   gender?: string | null;
   use_case?: string | null;
   preview_url?: string | null;
-};
-
-export type RankedVoice = {
-  voice_id: string;
-  name: string;
-  language: string;
-  age: string;
-  preview_url: string;
-  reason: string;
 };
 
 const RANK_SYSTEM = `You are a voice director casting an audio drama. For one character, you are given:
@@ -157,28 +160,30 @@ ${JSON.stringify(trimmed, null, 2)}
 
 Pick top 3.`;
 
-  const response = await anthropic.messages.create({
-    model: env.CLAUDE_MODEL,
+  const response = await llm.chat.completions.create({
+    model: env.OPENROUTER_MODEL,
     max_tokens: 1500,
-    system: RANK_SYSTEM,
-    messages: [{ role: 'user', content: userMsg }],
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: RANK_SYSTEM },
+      { role: 'user', content: userMsg },
+    ],
   });
-  const block = response.content[0];
-  if (!block || block.type !== 'text') return [];
-  const parsed = parseJson<{ ranked: { voice_id: string; rank: number; reason: string }[] }>(block.text);
+  const content = response.choices[0]?.message?.content;
+  if (!content) return [];
+  const parsed = parseJson<{ ranked: { voice_id: string; rank: number; reason: string }[] }>(content);
   return parsed.ranked ?? [];
 }
 
 /**
- * Robust JSON extractor: Claude usually returns clean JSON when instructed,
- * but this peels off any stray ```json fences just in case.
+ * Robust JSON extractor: free models occasionally wrap JSON in fences or
+ * preface it with a sentence even when told not to. This peels both off.
  */
 function parseJson<T>(text: string): T {
   let trimmed = text.trim();
   if (trimmed.startsWith('```')) {
     trimmed = trimmed.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
   }
-  // Find the first '{' or '[' and the matching last '}' or ']' as a fallback
   const firstBrace = trimmed.search(/[{[]/);
   if (firstBrace > 0) trimmed = trimmed.slice(firstBrace);
   return JSON.parse(trimmed) as T;
