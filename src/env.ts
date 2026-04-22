@@ -27,11 +27,13 @@ export const env = {
     .filter(Boolean),
 
   // Free OpenRouter model by default; override per project. Examples:
-  //   anthropic/claude-sonnet-4.6   (paid, best for nuanced JSON)
-  //   openai/gpt-4o                  (paid)
+  //   anthropic/claude-sonnet-4.6                   (paid, best for nuanced JSON)
+  //   openai/gpt-4o                                  (paid)
+  //   deepseek/deepseek-r1:free                      (free, strong reasoning)
   //   google/gemini-2.0-flash-exp:free
   //   meta-llama/llama-3.3-70b-instruct:free
-  OPENROUTER_MODEL: optional('OPENROUTER_MODEL', 'nvidia/nemotron-3-super-120b-a12b:free'),
+  //   nvidia/llama-3.1-nemotron-70b-instruct:free
+  OPENROUTER_MODEL: optional('OPENROUTER_MODEL', 'deepseek/deepseek-chat:free'),
 
   // Auto-generated, persisted to .jwt-secret (gitignored)
   JWT_SECRET: loadOrCreateJwtSecret(),

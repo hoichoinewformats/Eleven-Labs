@@ -53,7 +53,7 @@ The first signup also auto-becomes admin if you skip step 4.
 | `DATABASE_URL` | yes | PostgreSQL connection string. Neon (`https://console.neon.tech`) is recommended — free tier, fully managed. |
 | `OPENROUTER_API_KEY` | yes | One key, many models. Get from https://openrouter.ai/keys |
 | `ELEVENLABS_API_KEY` | yes | From https://elevenlabs.io/app/settings/api-keys |
-| `OPENROUTER_MODEL` | no | Defaults to `nvidia/nemotron-3-super-120b-a12b:free`. Other examples: `anthropic/claude-sonnet-4.6`, `openai/gpt-4o`, `google/gemini-2.0-flash-exp:free`, `meta-llama/llama-3.3-70b-instruct:free`. |
+| `OPENROUTER_MODEL` | no | Defaults to `deepseek/deepseek-chat:free`. Other examples: `anthropic/claude-sonnet-4.6` (paid, best JSON adherence), `openai/gpt-4o` (paid), `deepseek/deepseek-r1:free`, `google/gemini-2.0-flash-exp:free`, `meta-llama/llama-3.3-70b-instruct:free`. |
 | `PORT` | no | Default `4000` |
 | `HOST` | no | Default `0.0.0.0` |
 | `CORS_ORIGIN` | no | Default `*`. Comma-separated list to restrict. |
@@ -64,7 +64,7 @@ The first signup also auto-becomes admin if you skip step 4.
 
 ### A note on free LLMs
 
-The default `nvidia/nemotron-3-super-120b-a12b:free` is great for prototyping but free models can be unreliable about strict JSON output. If you see analysis errors or malformed character data, switch `OPENROUTER_MODEL` to a paid Claude or GPT model — analysis quality improves dramatically.
+The default `deepseek/deepseek-chat:free` is generally one of the better free models for structured JSON output, but no free model matches Claude / GPT for strict-schema reliability on long mixed-language scripts. If you see analysis errors or malformed character data, switch `OPENROUTER_MODEL` to a paid model — analysis quality improves dramatically.
 
 ## API surface
 
