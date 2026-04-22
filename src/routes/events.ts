@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../db.js';
-import { subscribeScriptEvents } from '../lib/events.js';
+import { getBufferedEvents, subscribeScriptEvents } from '../lib/events.js';
 
 /**
  * SSE: live progress for one script.
@@ -61,13 +61,30 @@ export async function eventRoutes(app: FastifyInstance) {
       processedAt: script.processedAt?.getTime() ?? null,
     });
 
-    // If already terminal, close immediately
-    if (script.status === 'done' || script.status === 'error') {
-      writeEvent(script.status, {
-        scriptId,
-        message: script.errorMessage ?? null,
-        ts: Date.now(),
-      });
+    // Replay any progress events that fired before the client connected.
+    // Without this, fast-failure cases (or fast-completion cases) lose the
+    // intermediate `parsing`/`analyzing`/`matching_voices` events.
+    const buffered = getBufferedEvents(scriptId);
+    let replayedSinceTs = 0;
+    let bufferedTerminal = false;
+    for (const e of buffered) {
+      writeEvent(e.type, e);
+      if (e.ts > replayedSinceTs) replayedSinceTs = e.ts;
+      if (e.type === 'done' || e.type === 'error') bufferedTerminal = true;
+    }
+
+    // If the buffer or DB tells us this script is finished, we're done.
+    if (bufferedTerminal || script.status === 'done' || script.status === 'error') {
+      // If the buffer was empty (e.g. server restarted after the script
+      // finished) but the DB shows terminal, synthesise a terminal event
+      // so the client gets a clean close signal.
+      if (!bufferedTerminal && (script.status === 'done' || script.status === 'error')) {
+        writeEvent(script.status, {
+          scriptId,
+          message: script.errorMessage ?? null,
+          ts: Date.now(),
+        });
+      }
       raw.end();
       return;
     }
@@ -93,7 +110,9 @@ export async function eventRoutes(app: FastifyInstance) {
       }
     };
 
+    // Live subscription. Skip events the client already saw via replay.
     const unsubscribe = subscribeScriptEvents(scriptId, (event) => {
+      if (event.ts <= replayedSinceTs) return;
       writeEvent(event.type, event);
       if (event.type === 'done' || event.type === 'error') {
         // Give the client a tick to receive, then close.
