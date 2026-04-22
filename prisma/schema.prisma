@@ -1,0 +1,138 @@
+// Logline AI - Voice Casting backend schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  writer
+  viewer
+}
+
+enum ScriptStatus {
+  pending
+  processing
+  done
+  error
+}
+
+enum Gender {
+  Male
+  Female
+  Unspecified
+}
+
+// Loose age buckets - matches the frontend chip values
+enum AgeBucket {
+  teen
+  young
+  middle_aged
+  elder
+  unspecified
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role      @default(writer)
+  createdAt    DateTime  @default(now())
+  projects     Project[]
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  language    String   // "Hindi", "Bengali", etc.
+  genre       String   // "Drama", "Mythological", etc.
+  medium      String   // "Audio Drama", "Microdrama", etc.
+  createdAt   DateTime @default(now())
+  scripts     Script[]
+
+  @@index([ownerId])
+}
+
+model Script {
+  id            String       @id @default(cuid())
+  projectId     String
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name          String       // user-facing display name (file basename by default)
+  filename      String       // original uploaded filename
+  storagePath   String       // path on disk relative to UPLOAD_DIR
+  sizeBytes     Int
+  status        ScriptStatus @default(pending)
+  errorMessage  String?
+  createdAt     DateTime     @default(now())
+  processedAt   DateTime?
+  episodes      Episode[]
+
+  @@index([projectId])
+}
+
+model Episode {
+  id            String      @id @default(cuid())
+  scriptId      String
+  script        Script      @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  episodeNumber Int         // 1-indexed within the script
+  title         String?
+  rawText       String      @db.Text
+  characters    Character[]
+
+  @@unique([scriptId, episodeNumber])
+}
+
+model Character {
+  id          String       @id @default(cuid())
+  episodeId   String
+  episode     Episode      @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  // Stable key for cross-episode aggregation. Lowercased canonical name.
+  canonicalKey String
+  name        String       // display name as it appears in script (e.g. "Ravan / Dashanan")
+  role        String       // Lead, Antagonist, Supporting, Cameo, Narrator, Comic relief, etc.
+  gender      Gender       @default(Unspecified)
+  age         AgeBucket    @default(unspecified)
+  mood        String       // short descriptor sentence shown in the casting sheet
+  lineCount   Int          @default(0)
+  dialogues   Dialogue[]
+  voices      VoiceMatch[]
+
+  @@index([episodeId])
+  @@index([canonicalKey])
+}
+
+model Dialogue {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  sequence    Int       // order within the episode
+  text        String    @db.Text
+  sceneCue    String?   // optional scene/stage direction tag, e.g. "हँसते हुए"
+
+  @@index([characterId])
+  @@index([characterId, sequence])
+}
+
+model VoiceMatch {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  rank        Int       // 0 = top pick, 1 = option 2, 2 = option 3
+  voiceId     String    // ElevenLabs voice id
+  voiceName   String
+  language    String    // "Hindi", "English", etc.
+  age         String    // "young", "middle-aged", "elder", "unspecified"
+  previewUrl  String
+  reason      String    @db.Text
+
+  @@unique([characterId, rank])
+  @@index([characterId])
+}
