@@ -8,6 +8,8 @@ import { projectRoutes } from './routes/projects.js';
 import { scriptRoutes } from './routes/scripts.js';
 import { castingRoutes } from './routes/casting.js';
 import { dialogueRoutes } from './routes/dialogues.js';
+import { eventRoutes } from './routes/events.js';
+import { startScriptWorker } from './lib/queue.js';
 import './types.js';
 
 async function build() {
@@ -48,6 +50,7 @@ async function build() {
       await api.register(scriptRoutes);
       await api.register(castingRoutes);
       await api.register(dialogueRoutes);
+      await api.register(eventRoutes);
     },
     { prefix: '/api' },
   );
@@ -60,6 +63,18 @@ async function main() {
   try {
     await app.listen({ port: env.PORT, host: env.HOST });
     app.log.info(`logline-ai backend listening on http://${env.HOST}:${env.PORT}`);
+
+    // In inline mode (dev default) we also run a worker in this process so
+    // `npm run dev` is a single command. In queue mode (production) the API
+    // only enqueues; run `npm run start:worker` in a separate process.
+    if (env.WORKER_MODE === 'inline') {
+      const w = startScriptWorker();
+      app.log.info(
+        `WORKER_MODE=inline: in-process BullMQ worker attached (concurrency ${w.opts.concurrency ?? 'default'})`,
+      );
+    } else {
+      app.log.info('WORKER_MODE=queue: API enqueues only - run `npm run start:worker` separately.');
+    }
   } catch (err) {
     app.log.error(err);
     process.exit(1);

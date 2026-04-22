@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { prisma } from '../db.js';
 import { env } from '../env.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
-import { processScript } from '../lib/processing.js';
+import { enqueueScript } from '../lib/queue.js';
 
 const SCRIPT_LIMIT_PER_PROJECT = 50;
 
@@ -66,10 +66,10 @@ export async function scriptRoutes(app: FastifyInstance) {
         },
       });
 
-      // Kick off processing without awaiting; client polls /scripts/:id for status.
-      processScript(script.id).catch((err) => {
-        console.error(`processScript(${script.id}) failed:`, err);
-      });
+      // Hand off to BullMQ. The worker (in-process when WORKER_MODE=inline,
+      // separate when WORKER_MODE=queue) consumes it. Client subscribes to
+      // GET /api/scripts/:id/events (SSE) for live progress.
+      await enqueueScript(script.id);
 
       return reply.send({ script: serializeScript(script) });
     },
@@ -101,7 +101,7 @@ export async function scriptRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const script = await prisma.script.findUnique({ where: { id } });
     if (!script) return reply.code(404).send({ error: 'not_found' });
-    processScript(id).catch((err) => console.error(`reprocess(${id}) failed:`, err));
+    await enqueueScript(id);
     return { ok: true, status: 'processing' };
   });
 }

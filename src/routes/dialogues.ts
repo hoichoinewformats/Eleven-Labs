@@ -1,6 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../db.js';
 import { requireAuth } from '../auth/middleware.js';
+import { buildCharacterDialogueDocx, safeFilename } from '../lib/docx-export.js';
+
+function canonicalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/\s*\/.*$/, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 export async function dialogueRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireAuth);
@@ -45,16 +57,7 @@ export async function dialogueRoutes(app: FastifyInstance) {
     const q = req.query as { name?: string; key?: string };
     if (!q.name && !q.key) return reply.code(400).send({ error: 'missing_query', need: 'name or key' });
 
-    const canonicalKey =
-      q.key ??
-      (q.name ?? '')
-        .toLowerCase()
-        .normalize('NFKC')
-        .replace(/\s*\/.*$/, '')
-        .replace(/\(.*?\)/g, '')
-        .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+    const canonicalKey = q.key ?? canonicalizeName(q.name ?? '');
 
     const characters = await prisma.character.findMany({
       where: {
@@ -111,6 +114,78 @@ export async function dialogueRoutes(app: FastifyInstance) {
       totalLines,
       episodes: grouped,
     };
+  });
+
+  /**
+   * DOCX download of every line a character speaks across the whole project.
+   * Same data as /projects/:id/dialogues but rendered as a Word document the
+   * voice actor can print or annotate.
+   */
+  app.get('/projects/:id/dialogues.docx', async (req, reply) => {
+    const { id: projectId } = req.params as { id: string };
+    const q = req.query as { name?: string; key?: string };
+    if (!q.name && !q.key) return reply.code(400).send({ error: 'missing_query', need: 'name or key' });
+
+    const canonicalKey = q.key ?? canonicalizeName(q.name ?? '');
+
+    const [project, characters] = await Promise.all([
+      prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }),
+      prisma.character.findMany({
+        where: {
+          canonicalKey,
+          episode: { script: { projectId } },
+        },
+        include: {
+          dialogues: { orderBy: { sequence: 'asc' } },
+          episode: {
+            select: {
+              episodeNumber: true,
+              title: true,
+              script: { select: { name: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    if (!project) return reply.code(404).send({ error: 'project_not_found' });
+    if (characters.length === 0) return reply.code(404).send({ error: 'character_not_found' });
+
+    const sorted = [...characters].sort(
+      (a, b) =>
+        a.episode.script.name.localeCompare(b.episode.script.name) ||
+        a.episode.episodeNumber - b.episode.episodeNumber,
+    );
+
+    const docData = {
+      projectName: project.name,
+      displayName: characters[0]!.name,
+      totalLines: sorted.reduce((sum, c) => sum + c.dialogues.length, 0),
+      episodes: sorted.map((c) => ({
+        scriptName: c.episode.script.name,
+        episodeNumber: c.episode.episodeNumber,
+        episodeTitle: c.episode.title,
+        characterName: c.name,
+        role: c.role,
+        mood: c.mood,
+        lineCount: c.lineCount,
+        dialogues: c.dialogues.map((d) => ({
+          sequence: d.sequence,
+          text: d.text,
+          sceneCue: d.sceneCue,
+        })),
+      })),
+    };
+
+    const buffer = await buildCharacterDialogueDocx(docData);
+    const filename = `${safeFilename(project.name)}__${safeFilename(characters[0]!.name)}.docx`;
+    return reply
+      .header(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      )
+      .header('Content-Disposition', `attachment; filename="${filename}"`)
+      .send(buffer);
   });
 
   /**

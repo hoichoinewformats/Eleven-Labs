@@ -21,6 +21,9 @@ export const env = {
 
   DATABASE_URL: required('DATABASE_URL'),
 
+  REDIS_URL: optional('REDIS_URL', 'redis://localhost:6379'),
+  WORKER_MODE: (optional('WORKER_MODE', 'queue') as 'queue' | 'inline'),
+
   JWT_SECRET: required('JWT_SECRET'),
   JWT_EXPIRES_IN: optional('JWT_EXPIRES_IN', '7d'),
 
