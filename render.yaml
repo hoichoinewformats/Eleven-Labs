@@ -19,7 +19,10 @@ services:
     name: logline-ai-backend
     runtime: node
     plan: free
-    region: singapore # closest to your Neon ap-southeast-1 region
+    region: oregon # singapore is paid-only on Render free tier; oregon adds
+                   # ~200ms per query to your Neon ap-southeast-1 DB which is
+                   # acceptable for the casting workflow. Switch to singapore
+                   # later if you upgrade to a paid plan.
     branch: claude/script-character-voice-analyzer-KM0wP
     # preDeployCommand is paid-plan only. Run the migration as the last step
     # of build instead - same effect on free tier (build env has DATABASE_URL,
