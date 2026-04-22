@@ -1,24 +1,18 @@
 # Render Blueprint - https://render.com/docs/blueprint-spec
 #
-# Deploys the Logline AI backend as a single Node web service.
+# WARNING: this file contains secrets in plaintext and is committed to git.
+# Rotate all three credentials immediately after the first successful deploy:
+#   - Neon password:   https://console.neon.tech (your project -> Roles -> reset)
+#   - OpenRouter key:  https://openrouter.ai/keys (revoke + create new)
+#   - ElevenLabs key:  https://elevenlabs.io/app/settings/api-keys
+# After rotation, update the values either by editing this file (push triggers
+# redeploy) or by overriding them in the Render dashboard's Environment tab.
 #
-# How to use:
-#   1. Push this file to your repo's default branch (already there).
-#   2. On Render: New + -> "Blueprint" -> point at hoichoinewformats/eleven-labs.
-#   3. Render reads this file and prompts for the three secret env vars:
-#        DATABASE_URL          <- your Neon "Pooled connection" string
-#        OPENROUTER_API_KEY    <- from https://openrouter.ai/keys
-#        ELEVENLABS_API_KEY    <- from https://elevenlabs.io/app/settings/api-keys
-#   4. Render builds, runs `prisma migrate deploy` against your Neon DB, starts.
-#
-# Free tier notes:
-#   - 750 service hours/month (enough for one always-on small service).
-#   - Spins down after ~15 min idle; first request after that takes ~30s
-#     to cold-start. Upgrade to "starter" ($7/mo) for no spin-down.
-#   - Filesystem is ephemeral - uploaded DOCX files in ./uploads are lost
-#     on redeploy/restart. The extracted analysis is in Postgres so this
-#     only matters if you want to re-process an already-uploaded script
-#     after a redeploy.
+# How to deploy:
+#   1. Open https://dashboard.render.com/select-repo?type=blueprint
+#   2. Connect the hoichoinewformats/eleven-labs repo.
+#   3. Render reads this file. All env vars are pre-filled - just hit Apply.
+#   4. ~3 min later you get https://logline-ai-backend.onrender.com.
 
 services:
   - type: web
@@ -30,7 +24,6 @@ services:
     buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /health
-    # Run Prisma migrations on every deploy (idempotent, runs against Neon).
     preDeployCommand: npx prisma migrate deploy
     autoDeploy: true
     envVars:
@@ -42,16 +35,13 @@ services:
         value: 4000
       - key: HOST
         value: 0.0.0.0
-      # Frontend origins. Replace with your real domain later, or leave * for now.
       - key: CORS_ORIGIN
         value: "*"
-      # The 3 required secrets - leave value blank so Render prompts you on first deploy.
       - key: DATABASE_URL
-        sync: false
+        value: "postgresql://neondb_owner:npg_H0nMfjz2Lmsl@ep-delicate-cloud-aofozm9i-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
       - key: OPENROUTER_API_KEY
-        sync: false
+        value: "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"
       - key: ELEVENLABS_API_KEY
-        sync: false
-      # Optional model override. Defaults in code to deepseek/deepseek-chat:free.
+        value: "da58bf05346fe219826205b34ed17a040f6beab8001a696e5b93c939ec2aab33"
       - key: OPENROUTER_MODEL
         value: deepseek/deepseek-chat:free
