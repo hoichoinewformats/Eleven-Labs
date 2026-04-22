@@ -21,10 +21,12 @@ services:
     plan: free
     region: singapore # closest to your Neon ap-southeast-1 region
     branch: claude/script-character-voice-analyzer-KM0wP
-    buildCommand: npm ci && npm run build
+    # preDeployCommand is paid-plan only. Run the migration as the last step
+    # of build instead - same effect on free tier (build env has DATABASE_URL,
+    # so it can hit Neon; if the migration fails the deploy fails cleanly).
+    buildCommand: npm ci && npm run build && npx prisma migrate deploy
     startCommand: npm start
     healthCheckPath: /health
-    preDeployCommand: npx prisma migrate deploy
     autoDeploy: true
     envVars:
       - key: NODE_VERSION
