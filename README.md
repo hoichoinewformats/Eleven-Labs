@@ -191,6 +191,46 @@ with `fetch('/api/...')` calls:
 | Delete script | `DELETE /api/scripts/:id` |
 | New "Export character lines" button | `GET /api/projects/:id/dialogues.docx?name=<character>` (download) or JSON variant |
 
+## Deploy to Render (free, ~3 min)
+
+A `render.yaml` blueprint is included. To deploy:
+
+1. **Open** https://dashboard.render.com/select-repo?type=blueprint
+2. **Connect** the `hoichoinewformats/eleven-labs` repo (Render will ask for GitHub access if you haven't connected it before).
+3. Render reads `render.yaml` and prompts you for **three secrets**:
+   - `DATABASE_URL` — your Neon **Pooled connection** string (copy from Neon Console → your project → Connection Details → Pooled)
+   - `OPENROUTER_API_KEY` — from https://openrouter.ai/keys
+   - `ELEVENLABS_API_KEY` — from https://elevenlabs.io/app/settings/api-keys
+4. Click **Apply**. Render runs `npm ci`, `prisma generate`, `tsc`, then `prisma migrate deploy` against your Neon DB, then `npm start`.
+5. After ~3 min you get a URL like `https://logline-ai-backend.onrender.com`. Verify with `curl https://<your-url>/health`.
+
+### Free tier caveats
+
+| Item | Free tier behavior | Mitigation |
+|---|---|---|
+| Idle spin-down | Service sleeps after ~15 min of no requests. First request takes ~30s. | Upgrade to "Starter" ($7/mo) for always-on, or hit `/health` from cron-job.org every 10 min. |
+| Filesystem | Ephemeral — uploaded `.docx` files are lost on redeploy. | The processed analysis is persisted in Postgres so this only blocks re-processing the same upload. For real production, swap `UPLOAD_DIR` for S3/R2. |
+| 512 MB RAM | Plenty for our app. | – |
+
+### After deploy: smoke-test
+
+```bash
+URL=https://your-service.onrender.com
+
+curl $URL/health
+
+# create the first user (becomes admin)
+TOKEN=$(curl -sX POST $URL/api/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"You","email":"you@hoichoi.com","password":"changeme123"}' \
+  | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
+
+# create a project
+curl -X POST $URL/api/projects -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Demo","language":"Hindi","genre":"Drama","medium":"Audio Drama"}'
+```
+
 ## Production notes
 
 - **Single process design**: API and pg-boss worker run in the same Node process. To scale beyond one machine, the SSE event bus needs to move from in-process EventEmitter to Postgres LISTEN/NOTIFY (or back to Redis pub/sub). The queue itself is already shared via Postgres so multiple worker processes work today.

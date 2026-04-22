@@ -1,0 +1,57 @@
+# Render Blueprint - https://render.com/docs/blueprint-spec
+#
+# Deploys the Logline AI backend as a single Node web service.
+#
+# How to use:
+#   1. Push this file to your repo's default branch (already there).
+#   2. On Render: New + -> "Blueprint" -> point at hoichoinewformats/eleven-labs.
+#   3. Render reads this file and prompts for the three secret env vars:
+#        DATABASE_URL          <- your Neon "Pooled connection" string
+#        OPENROUTER_API_KEY    <- from https://openrouter.ai/keys
+#        ELEVENLABS_API_KEY    <- from https://elevenlabs.io/app/settings/api-keys
+#   4. Render builds, runs `prisma migrate deploy` against your Neon DB, starts.
+#
+# Free tier notes:
+#   - 750 service hours/month (enough for one always-on small service).
+#   - Spins down after ~15 min idle; first request after that takes ~30s
+#     to cold-start. Upgrade to "starter" ($7/mo) for no spin-down.
+#   - Filesystem is ephemeral - uploaded DOCX files in ./uploads are lost
+#     on redeploy/restart. The extracted analysis is in Postgres so this
+#     only matters if you want to re-process an already-uploaded script
+#     after a redeploy.
+
+services:
+  - type: web
+    name: logline-ai-backend
+    runtime: node
+    plan: free
+    region: singapore # closest to your Neon ap-southeast-1 region
+    branch: claude/script-character-voice-analyzer-KM0wP
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    # Run Prisma migrations on every deploy (idempotent, runs against Neon).
+    preDeployCommand: npx prisma migrate deploy
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: HOST
+        value: 0.0.0.0
+      # Frontend origins. Replace with your real domain later, or leave * for now.
+      - key: CORS_ORIGIN
+        value: "*"
+      # The 3 required secrets - leave value blank so Render prompts you on first deploy.
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      # Optional model override. Defaults in code to deepseek/deepseek-chat:free.
+      - key: OPENROUTER_MODEL
+        value: deepseek/deepseek-chat:free
