@@ -5,12 +5,15 @@ import { env } from '../env.js';
 // (Claude / GPT / Llama / Nemotron / Gemini) by changing one env var.
 // OPENROUTER_MODEL defaults to a free model so the project boots without
 // adding paid credits.
+//
+// Note: HTTP-Referer is optional and only used for OpenRouter's per-app
+// analytics dashboard. We omit it so requests are not rejected by per-key
+// allowlists. Set OPENROUTER_REFERER to enable.
 export const llm = new OpenAI({
   apiKey: env.OPENROUTER_API_KEY,
   baseURL: 'https://openrouter.ai/api/v1',
   defaultHeaders: {
-    // OpenRouter uses these to track per-app usage in their dashboard.
-    'HTTP-Referer': 'https://logline.hoichoi.tv',
+    ...(process.env.OPENROUTER_REFERER ? { 'HTTP-Referer': process.env.OPENROUTER_REFERER } : {}),
     'X-Title': 'Logline AI',
   },
 });

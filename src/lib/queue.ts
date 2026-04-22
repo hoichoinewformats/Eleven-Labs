@@ -25,6 +25,11 @@ export async function getBoss(): Promise<PgBoss> {
     console.error('[pg-boss] error:', err);
   });
   await boss.start();
+  // pg-boss v10 requires queues to be explicitly created before send/work.
+  // Idempotent - re-creating an existing queue is a no-op for our purposes.
+  await boss.createQueue(SCRIPT_QUEUE).catch((err) => {
+    if (!String(err?.message ?? '').includes('already exists')) throw err;
+  });
   return boss;
 }
 
